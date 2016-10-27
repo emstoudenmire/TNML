@@ -1,5 +1,6 @@
 input
     {
+    label = 3
     imglen = 8
 
     nthread = 2
