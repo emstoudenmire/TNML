@@ -24,6 +24,7 @@ Dependencies:
 - png++: http://www.nongnu.org/pngpp/
 
 Steps to install:
+
 1. Install the above dependencies.
 2. Do `cp Makefile.sample Makefile` to create a `Makefile` from the sample provided.
 3. Edit the following variables at the top of your Makefile:
