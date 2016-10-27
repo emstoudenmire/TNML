@@ -1,4 +1,6 @@
 LIBRARY_DIR=$(HOME)/software/itensor
+LIBPNG_DIR=/usr/local/Cellar/libpng/1.6.18/lib
+PNGPP_DIR=$(HOME)/packages/png++-0.2.9
 include $(LIBRARY_DIR)/this_dir.mk
 include $(LIBRARY_DIR)/options.mk
 
@@ -25,11 +27,11 @@ OBJECTS=$(APP).o
 GOBJECTS=$(patsubst %,.debug_objs/%, $(OBJECTS))
 
 #Define Flags ----------
-EXTRA_FLAGS += -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
+EXTRA_FLAGS += -std=c++1y -I$(PNGPP_DIR) -I/usr/local/include
 CCFLAGS += $(EXTRA_FLAGS)
 CCGFLAGS += $(EXTRA_FLAGS)
 
-EXTRA_LIBFLAGS += -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
+EXTRA_LIBFLAGS += -L$(LIBPNG_DIR) -lpng16
 LIBFLAGS += $(EXTRA_LIBFLAGS)
 LIBGFLAGS += $(EXTRA_LIBFLAGS)
 
