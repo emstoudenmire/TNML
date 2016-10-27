@@ -3,7 +3,7 @@
 Codes based on the paper "Supervised Learning with Quantum-Inspired Tensor Networks"
 by Miles Stoudenmire and David Schwab. http://arxiv.org/abs/1605.05775
 
-(Also see http://arxiv.org/abs/1605.03795 for a closely related approach.)
+Also see "Tensor Train Polynomial Models via Riemannian Optimization" by Novikov, Trofimov, and Oseledets for a closely related approach: http://arxiv.org/abs/1605.03795
 
 
 # Code Overview
