@@ -1,4 +1,4 @@
-LIBRARY_DIR=$(HOME)/software/newitensor
+LIBRARY_DIR=$(HOME)/software/itensor
 include $(LIBRARY_DIR)/this_dir.mk
 include $(LIBRARY_DIR)/options.mk
 
@@ -26,7 +26,6 @@ GOBJECTS=$(patsubst %,.debug_objs/%, $(OBJECTS))
 
 #Define Flags ----------
 EXTRA_FLAGS += -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
-#EXTRA_FLAGS += -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include -ftime-report
 CCFLAGS += $(EXTRA_FLAGS)
 CCGFLAGS += $(EXTRA_FLAGS)
 
