@@ -1,0 +1,73 @@
+LIBRARY_DIR=$(HOME)/software/newitensor
+include $(LIBRARY_DIR)/this_dir.mk
+include $(LIBRARY_DIR)/options.mk
+
+################################################################
+#Options --------------
+
+HEADERS=paralleldo.h mnist.h util.h single.h
+
+ifdef app
+APP=$(app)
+else
+APP=separate_fulltest
+APP=single
+APP=fulltest
+APP=fixedL
+endif
+
+
+#################################################################
+
+OBJECTS=$(APP).o
+
+#Mappings --------------
+GOBJECTS=$(patsubst %,.debug_objs/%, $(OBJECTS))
+
+#Define Flags ----------
+EXTRA_FLAGS += -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
+#EXTRA_FLAGS += -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include -ftime-report
+CCFLAGS += $(EXTRA_FLAGS)
+CCGFLAGS += $(EXTRA_FLAGS)
+
+EXTRA_LIBFLAGS += -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
+LIBFLAGS += $(EXTRA_LIBFLAGS)
+LIBGFLAGS += $(EXTRA_LIBFLAGS)
+
+#CCFLAGS=-I. $(ITENSOR_INCLUDEFLAGS) $(OPTIMIZATIONS) -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
+#CCGFLAGS=-I. $(ITENSOR_INCLUDEFLAGS) $(DEBUGFLAGS) -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
+#LIBFLAGS=-L$(ITENSOR_LIBDIR) $(ITENSOR_LIBFLAGS) -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
+#LIBGFLAGS=-L$(ITENSOR_LIBDIR) $(ITENSOR_LIBGFLAGS) -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
+
+#Rules ------------------
+
+%.o: %.cc $(HEADERS)
+	$(CCCOM) -c $(CCFLAGS) -o $@ $<
+
+.debug_objs/%.o: %.cc $(HEADERS)
+	$(CCCOM) -c $(CCGFLAGS) -o $@ $<
+
+%.o: %.cpp $(HEADERS)
+	$(CCCOM) -c $(CCFLAGS) -o $@ $<
+
+.debug_objs/%.o: %.cpp $(HEADERS)
+	$(CCCOM) -c $(CCGFLAGS) -o $@ $<
+
+#Targets -----------------
+
+default: build
+
+build: $(APP)
+debug: $(APP)-g
+
+$(APP): $(OBJECTS) 
+	$(CCCOM) $(CCFLAGS) $(OBJECTS) -o $(APP) $(LIBFLAGS)
+
+$(APP)-g: mkdebugdir $(GOBJECTS) $(ITENSOR_GLIBS)
+	$(CCCOM) $(CCGFLAGS) $(GOBJECTS) -o $(APP)-g $(LIBGFLAGS)
+
+mkdebugdir:
+	mkdir -p .debug_objs
+
+clean:
+	rm -fr *.o $(APP) $(APP)-g .debug_objs
