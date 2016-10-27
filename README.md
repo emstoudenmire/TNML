@@ -18,6 +18,20 @@ by Miles Stoudenmire and David Schwab. http://arxiv.org/abs/1605.05775
 
 # Compiling and running the programs
 
+Dependencies:
+- ITensor tensor network library: http://itensor.org  (on github at http://github.com/ITensor/ITensor)
+- libpng (available through most package managers): http://www.libpng.org
+- png++: http://www.nongnu.org/pngpp/
+
+Steps to install:
+1. Install the above dependencies.
+2. Do `cp Makefile.sample Makefile` to create a `Makefile` from the sample provided.
+3. Edit the following variables at the top of your Makefile:
+   - `ITENSOR_DIR`: this should be the folder where you `git clone`'d and installed ITensor (where the options.mk file is located)
+   - `LIBPNG_DIR`: folder where the file libpng16.so (or libpng16.dylib on mac) is located
+   - `PNGPP_DIR`: folder where the png++ header (.hpp) files are located
+4. Run the command `make`, which should successfully build the `fixedL` application.
+
 All of the codes require you to install the ITensor tensor network library. You can obtain it from http://github.com/ITensor/ITensor . The only software dependencies for ITensor are a compiler that supports C++11 (language and standard library) and a BLAS/LAPACK distribution such as the "lapack" package on linux, the Accelerate/Veclib framework on MacOS, or the Intel MKL library.
 
 See http://itensor.org/ for help installing ITensor and for more documentation on it.

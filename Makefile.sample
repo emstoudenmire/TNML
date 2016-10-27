@@ -1,8 +1,8 @@
-LIBRARY_DIR=$(HOME)/software/itensor
+ITENSOR_DIR=$(HOME)/software/itensor
 LIBPNG_DIR=/usr/local/Cellar/libpng/1.6.18/lib
 PNGPP_DIR=$(HOME)/packages/png++-0.2.9
-include $(LIBRARY_DIR)/this_dir.mk
-include $(LIBRARY_DIR)/options.mk
+include $(ITENSOR_DIR)/this_dir.mk
+include $(ITENSOR_DIR)/options.mk
 
 ################################################################
 #Options --------------
