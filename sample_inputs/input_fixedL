@@ -1,0 +1,14 @@
+input
+{
+
+imglen = 8
+
+nthread = 2
+
+maxm = 20
+cutoff = 1E-9
+
+lambda = 1E-8
+Npass = 10
+
+}
