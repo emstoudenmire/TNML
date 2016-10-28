@@ -29,6 +29,10 @@ getTrainState(MPSArr & trainmps,
     return &(trainmps.at(t.l).at(t.n)); 
     }
 
+//
+// Compute squared distance of the actual output
+// of the model from the ideal output
+//
 Real
 quadcost(ITensor B,
          vector<TState> const& ts,
@@ -38,13 +42,18 @@ quadcost(ITensor B,
     auto NT = ts.size();
     auto lambda = args.getReal("lambda",0.);
     auto showlabels = args.getBool("ShowLabels",false);
+
     auto L = findtype(B,Label);
     if(!L) L = findtype(ts.front().v,Label);
     if(!L) Error("Couldn't find Label index in quadcost");
+
     if(args.getBool("Normalize",false))
         {
         B /= norm(B);
         }
+
+    //
+    //Set up containers for multithreaded calculations
     auto deltas = array<ITensor,10>{};
     for(auto l : range(10)) deltas[l] = setElt(L(1+l));
     auto reals = array<vector<Real>,10ul>{};
@@ -53,6 +62,8 @@ quadcost(ITensor B,
         reals[l] = vector<Real>(parallel_do.Nthread(),0.);
         }
     auto ints = vector<int>(parallel_do.Nthread(),0);
+    //
+
     parallel_do(
         [&](Bound b)
             {
@@ -60,9 +71,14 @@ quadcost(ITensor B,
             for(auto i = b.begin; i < b.end; ++i)
                 {
                 auto& t = ts.at(i);
+                // P is the model output
                 auto P = B*t.v;
+                // deltas[t.l] is the ideal output vector
+                // (one-hot encoding) for the training state t
                 auto dP = deltas[t.l] - P;
+                // cost is square of dP
                 reals[t.l].at(b.n) += sqr(norm(dP));
+                // save all outputs to check if t correctly classified
                 for(auto k : range(10))
                     {
                     weights[k] = std::abs(P.real(L(1+k)));
@@ -116,6 +132,7 @@ cgrad(ITensor & B,
     auto reals = vector<Real>(Nthread);
     auto ints = vector<int>(Nthread);
 
+    // Compute initial gradient
     for(auto& T : tensors) T = ITensor{};
     parallel_do(
         [&](Bound b)
@@ -136,12 +153,7 @@ cgrad(ITensor & B,
     for(auto pass : range1(Npass))
         {
         println("  Conj grad pass ",pass);
-        //Compute p*A*p
-        //
-        // TODO: may be able to compute pAp
-        //       implicitly from information
-        //       obtainable when making next r
-        //
+        // Compute p*A*p
         for(auto& r : reals) r = 0.;
         parallel_do(
             [&](Bound b)
@@ -168,6 +180,7 @@ cgrad(ITensor & B,
 
         if(pass == Npass) break;
 
+        // Compute new gradient and cost function
         for(auto& T : tensors) T = ITensor();
         for(auto& r : reals) r = 0.;
         parallel_do(
@@ -193,6 +206,7 @@ cgrad(ITensor & B,
         C += lambda*sqr(norm(B));
         printfln("  Cost = %.10f",C/NT);
 
+        // Quit if gradient gets too small
         if(norm(r) < cconv) 
             {
             printfln("  |r| = %.1E < %.1E, breaking",norm(r),cconv);
@@ -231,6 +245,7 @@ mldmrg(MPS & W,
 
     auto cargs = Args{args,"Normalize",false};
 
+    // For loop over sweeps of the MPS
     for(auto sw : range1(sweeps))
     {
     printfln("\nSweep %d maxm=%d minm=%d",sw,sweeps.maxm(sw),sweeps.minm(sw));
@@ -238,8 +253,11 @@ mldmrg(MPS & W,
                          "Maxm",sweeps.maxm(sw),
                          "Minm",sweeps.minm(sw),
                          "Sweep",sw};
+    // Loop over individual bonds of the MPS
     for(int b = 1, ha = 1; ha <= 2; sweepnext(b,ha,N))
         {
+        // c and c+dc are j,j+1 if sweeping right
+        // if sweeping left they are j,j-1
         auto c = (ha==1) ? b : b+1;
         auto dc = (ha==1) ? +1 : -1;
 
@@ -248,15 +266,18 @@ mldmrg(MPS & W,
 
         printfln("Sweep %d Half %d Bond %d",sw,ha,c);
 
-        //Save old core tensor
+        // Save old bond tensor
         auto origm = commonIndex(W.A(c),W.A(c+dc)).m();
         auto oB = W.A(c)*W.A(c+dc);
 
+        // B is the bond tensor we will optimize
         auto B = oB;
         B.scaleTo(1.);
 
-        //Make effective image (4 site) tensors
-        //Store in t.v of each elem t of ts
+        //
+        // Make effective image (4 site) tensors
+        // Store in t.v of each elem t of ts
+        //
         parallel_do(
             [&](Bound b)
                 {
@@ -271,11 +292,14 @@ mldmrg(MPS & W,
                 }
             );
 
+        //
+        // Optimize bond tensor B
+        //
         if(method == "conj") cgrad(B,ts,parallel_do,args);
         else Error(format("method type \"%s\" not recognized",method));
 
         //
-        // Report after optimization
+        // Report cost after optimization
         //
         printfln("Sweep %d Half %d Bond %d",sw,ha,c);
 
@@ -315,10 +339,10 @@ mldmrg(MPS & W,
                 }
             }
 
-        //PAUSE; 
-
         //
-        // Update E's
+        // Update E's (MPS environment tensors)
+        // i.e. projection of training images into current "wings"
+        // of the MPS W
         //
         parallel_do(
             [&](Bound b)
@@ -336,10 +360,6 @@ mldmrg(MPS & W,
                     {
                     E.at(c) = E.at(c-dc)*(tmps.A(c)*W.A(c));
                     }
-                //Don't think we should normalize the t.E's because
-                //that's a nonlinear transformation that wouldn't happen
-                //to the test images as they go through the decision function
-                //t.E[L].at(c) /= norm(t.E.at(c));
                 E.at(c).scaleTo(1.);
                 }
             });
@@ -362,37 +382,11 @@ mldmrg(MPS & W,
     } //mldmrg
 
 
-
 int 
 main(int argc, const char* argv[])
     {
-    setenv("VECLIB_NUM_THREADS","1",1);
-    auto vnt = getenv("VECLIB_NUM_THREADS");
-    if(vnt != NULL)
-        println("pdmrg: VECLIB_NUM_THREADS = ",vnt);
-    else
-        println("pdmrg: OMP_NUM_THREADS not defined");
-
-    setenv("OMP_NUM_THREADS","1",1);
-    auto ont = getenv("OMP_NUM_THREADS");
-    if(ont != NULL)
-        println("pdmrg: OMP_NUM_THREADS = ",ont);
-    else
-        println("pdmrg: OMP_NUM_THREADS not defined");
-
-    setenv("MKL_NUM_THREADS","1",1);
-    auto mnt = getenv("MKL_NUM_THREADS");
-    if(mnt != NULL)
-        println("pdmrg: MKL_NUM_THREADS = ",mnt);
-    else
-        println("pdmrg: MKL_NUM_THREADS not defined");
-
-    setenv("GOTO_NUM_THREADS","1",1);
-    auto gnt = getenv("GOTO_NUM_THREADS");
-    if(gnt != NULL)
-        println("pdmrg: GOTO_NUM_THREADS = ",gnt);
-    else
-        println("pdmrg: GOTO_NUM_THREADS not defined");
+    // Set environment variables to use 1 thread
+    setOneThread();
 
     if(argc != 2) 
        { 
@@ -456,6 +450,9 @@ main(int argc, const char* argv[])
         writeToFile("sites",sites);
         }
 
+    //
+    // Local feature map (a lambda function)
+    //
     auto phi = [ftype,d](Real g, int n) -> Cplx
         {
         if(g < 0 || g > 255.) Error(format("Expected g=%f to be in [0,255]",g));
@@ -504,6 +501,11 @@ main(int argc, const char* argv[])
         }
     else
         {
+        //
+        // If W not read from disk,
+        // make initial W by summing training
+        // states together
+        //
         L = Index("L",10,Label);
         auto Lval = [&L](long n){ return L(1+n); };
         auto ipsis = vector<MPS>(labels.size());
@@ -549,7 +551,7 @@ main(int argc, const char* argv[])
 
 
     //
-    // Setup ts
+    // Setup ts (training state structs)
     //
     auto ts = vector<TState>(totNtrain);
     auto nextLabel = [&labels](long start_at = -1)
@@ -580,6 +582,10 @@ main(int argc, const char* argv[])
             }
         }
 
+    //
+    // Project training states (product states)
+    // into environment of W MPS
+    //
     print("Projecting training states...");
     parallel_do(
         [&](Bound b)
@@ -601,6 +607,7 @@ main(int argc, const char* argv[])
         );
     println("done");
 
+    // Set up initial t.v tensors
     parallel_do(
         [&](Bound b)
             {
