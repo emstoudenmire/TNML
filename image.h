@@ -33,7 +33,7 @@ class RGBPixel
     Real &
     operator[](size_t n) { return rgb[n]; }
 
-    size_t constexpr
+    size_t
     size() const { return 3ul; }
 
     RGBPixel&
