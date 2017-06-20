@@ -14,6 +14,7 @@ using itensor::printfln;
 using itensor::Real;
 using itensor::Cplx;
 using itensor::Pi;
+using itensor::sqr;
 
 using Pix = uint8_t;
 using ImgLabel = long;
@@ -230,6 +231,87 @@ class ImageT
     };
 
 using RGBImage = ImageT<RGBStore>;
+
+template<typename N, typename S>
+ImageT<N>
+resize(ImageT<S> const& oimg,
+       long newlen,
+       bool debug = false)
+    { 
+    using Sizet = decltype(oimg.width());
+    using PixT = decltype(oimg.pixel(0,0));
+    assert(oimg.width()==oimg.height());
+    long oldlen = oimg.width();
+
+    auto nimg = ImageT<N>(newlen,oimg.type(),oimg.num(),oimg.label());
+
+    if(oldlen < newlen)
+        {
+        Sizet pad = (newlen-oldlen)/2;
+        for(auto nx : range(nimg.width()))
+        for(auto ny : range(nimg.height()))
+            {
+            if(nx < pad || ny < pad ||
+               nx >= pad+oldlen || ny >= pad+oldlen)
+                {
+                nimg.set(nx,ny,PixT{});
+                }
+            else
+                {
+                auto ox = nx-pad;
+                auto oy = ny-pad;
+                nimg.set(nx,ny,oimg.pixel(ox,oy));
+                }
+            }
+        }
+    else if(oldlen > newlen)
+        {
+        //Credit Mark Ransom for posting algorithm
+        //below on Stack Overflow
+		Real scale = (1.*newlen)/oldlen;
+		PixT threshold = 0.5/(scale*scale);
+		Real yend = 0.0;
+		for(int f = 0; f < newlen; ++f) // y on output
+			{
+			Real ystart = yend;
+			yend = (f+1)/scale;
+			if(yend >= oldlen) yend = oldlen - 0.000001;
+			Real xend = 0.0;
+			for(int g = 0; g < newlen; ++g) // x on output
+				{
+				Real xstart = xend;
+				xend = (g+1)/scale;
+				if(xend >= oldlen) xend = oldlen - 0.000001;
+				auto sum = PixT{};
+				for(int y = (int)ystart; y <= (int)yend; ++y)
+					{
+					Real yportion = 1.0;
+					if(y == (int)ystart) yportion -= ystart - y;
+					if(y == (int)yend) yportion -= y+1 - yend;
+					for(int x = (int)xstart; x <= (int)xend; ++x)
+						{
+						Real xportion = 1.0;
+						if(x == (int)xstart) xportion -= xstart - x;
+						if(x == (int)xend) xportion -= x+1 - xend;
+						sum += oimg.pixel(x,y) * yportion * xportion;
+						}
+                    }
+				//auto val = (sum > threshold) ? 255 : 0;
+				nimg.set(g,f,sum);
+                }
+            }
+        }
+    else //oldlen == newlen
+        {
+        assert(oldlen == newlen);
+        for(auto x : range(oimg.width()))
+        for(auto y : range(oimg.height()))
+            {
+            nimg.set(x,y,oimg.pixel(x,y));
+            }
+        }
+    return nimg;
+    }
 
 template<typename N, typename S>
 ImageT<N>
