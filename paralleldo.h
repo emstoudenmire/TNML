@@ -12,34 +12,53 @@ struct Bound
     size_t end = 0;
     Bound() { }
     Bound(size_t nn, size_t b, size_t e) : n(nn),begin(b), end(e) { } 
+
+    size_t
+    size() const { return end-begin; }
     };
 
 //Function object for doing parallel tasks
 class ParallelDo
     {
-    vector<Bound> bounds;
+    vector<Bound> bounds_;
     public:
 
     ParallelDo(vector<Bound> const& bs)
-      : bounds(bs)
+      : bounds_(bs)
         { }
 
+    ParallelDo(int Nthread, int Ntask)
+      : bounds_(Nthread)
+        { 
+        auto th_size = Ntask/Nthread;
+        auto bcount = 0;
+        for(auto n : range(Nthread))
+            {
+            bounds_.at(n) = Bound(n,bcount,bcount+th_size);
+            bcount += th_size;
+            }
+        bounds_.back().end = Ntask;
+        }
+
     size_t
-    Nthread() const { return bounds.size(); }
+    Nthread() const { return bounds_.size(); }
+
+    vector<Bound> const&
+    bounds() const { return bounds_; }
 
     template<typename Task>
     void
     operator()(Task&& T) const
         {
         const auto Nf = 16ul;
-        if(bounds.size() > Nf) Error("Need to increase size of futs");
+        if(bounds_.size() > Nf) Error("Need to increase size of futs");
         auto futs = std::array<std::future<void>,Nf>{};
         auto task = move(T);
-        for(auto& b : bounds)
+        for(auto& b : bounds_)
             {
             futs.at(b.n) = std::async(std::launch::async,task,b);
             }
-        for(auto& b : bounds)
+        for(auto& b : bounds_)
             {
             futs.at(b.n).wait();
             }
