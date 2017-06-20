@@ -231,7 +231,7 @@ getAllMNIST(DataSet const& D,
     auto n = 0;
     for(auto I : Images(D,type))
         {
-        scal_images.at(n) = reduce<Pixels>(I,imglen);
+        scal_images.at(n) = resize<Pixels>(I,imglen);
         ++n;
         }
     return scal_images;
