@@ -10,24 +10,117 @@ using std::vector;
 using std::array;
 using std::move;
 using std::min;
+using std::string;
 
 const size_t NL = 10;
 
 //Struct holding info about training "states"
 struct TState
     {
+    SiteSet const& sites_;
+    bool active = true;
     long n = -1;
     int l = NL;
+    int d = 0;
     ITensor v;
-    vector<ITensor> E;
+    vector<Real> data;
+
+    template<typename Func>
+    TState(int n_, int l_, SiteSet const& sites, PImage const& img, Func const& phi)
+      : sites_(sites),
+        n(n_),
+        l(l_) 
+        {
+        auto N = sites.N();
+        d = sites(1).m();
+        data.resize(N*d);
+        auto i = 0;
+        for(auto j : range1(img.size()))
+        for(auto n : range1(d))
+            {
+            data.at(i) = phi(img(j),n);
+            ++i;
+            }
+        }
+    Real
+    operator()(int i, int n) const //1-indexed
+        {
+        //TODO: change .at() to []
+        return data.at(d*i+n-d-1);
+        }
+    ITensor
+    A(int i) const
+        {
+        auto store = DenseReal(d);
+        for(auto n : range(d)) store[n] = operator()(i,1+n);
+        return ITensor(IndexSet{sites_(i)},std::move(store));
+        }
+
     };
 
-MPS*
-getTrainState(MPSArr & trainmps,
-              TState const& t) 
-    { 
-    return &(trainmps.at(t.l).at(t.n)); 
-    }
+struct TrainStates
+    {
+    vector<TState> ts_;
+    vector<vector<ITensor>> E_;
+    int N = 0;
+
+    TrainStates(int N_) : N(N_) { }
+
+    int
+    size() const { return ts_.size(); }
+
+    TState const& 
+    front() const { return ts_.front(); }
+
+    void
+    makeEs(ParallelDo & pd, MPS const& W)
+        {
+        E_.resize(2+N);
+        for(auto n : range1(N))
+            {
+            E_.at(n).resize(ts_.size());
+            }
+        pd([&](Bound b)
+            {
+            for(auto i = b.begin; i < b.end; ++i)
+                {
+                auto& t = ts_.at(i);
+                E_.at(N).at(i) = t.A(N)*W.A(N);
+                for(auto j = N-1; j >= 3; --j)
+                    {
+                    E_.at(j).at(i) = (t.A(j)*W.A(j))*E_.at(j+1).at(i);
+                    E_.at(j).at(i).scaleTo(1.);
+                    }
+                t.v = t.A(1)*t.A(2);
+                t.v *= E_.at(3).at(i);
+                }
+            });
+        }
+
+    TState const&
+    operator()(int i) const { return ts_.at(i); }
+    TState &
+    operator()(int i) { return ts_.at(i); }
+
+    ITensor&
+    E(int x, int nt)
+        {
+        return E_.at(x).at(nt);
+        }
+    ITensor const&
+    E(int x, int nt) const
+        {
+        return E_.at(x).at(nt);
+        }
+
+    static string&
+    writeDir() 
+        {
+        static string wd = "proj_images";
+        return wd;
+        }
+
+    };
 
 //
 // Compute squared distance of the actual output
@@ -35,7 +128,7 @@ getTrainState(MPSArr & trainmps,
 //
 Real
 quadcost(ITensor B,
-         vector<TState> const& ts,
+         TrainStates const& ts,
          ParallelDo const& parallel_do,
          Args const& args = Args::global())
     {
@@ -45,7 +138,12 @@ quadcost(ITensor B,
 
     auto L = findtype(B,Label);
     if(!L) L = findtype(ts.front().v,Label);
-    if(!L) Error("Couldn't find Label index in quadcost");
+    if(!L) 
+        {
+        Print(B);
+        Print(ts.front().v);
+        Error("Couldn't find Label index in quadcost");
+        }
 
     if(args.getBool("Normalize",false))
         {
@@ -70,7 +168,7 @@ quadcost(ITensor B,
             auto weights = array<Real,10>{};
             for(auto i = b.begin; i < b.end; ++i)
                 {
-                auto& t = ts.at(i);
+                auto& t = ts(i);
                 // P is the model output
                 auto P = B*t.v;
                 // deltas[t.l] is the ideal output vector
@@ -110,7 +208,7 @@ quadcost(ITensor B,
 //
 void
 cgrad(ITensor & B,
-      vector<TState> & ts,
+      TrainStates & ts,
       ParallelDo const& parallel_do, 
       Args const& args)
     {
@@ -139,7 +237,7 @@ cgrad(ITensor & B,
             {
             for(auto i = b.begin; i < b.end; ++i)
                 {
-                auto& t = ts.at(i);
+                auto& t = ts(i);
                 auto P = B*t.v;
                 auto dP = deltas[t.l] - P;
                 tensors.at(b.n) += dP*dag(t.v);
@@ -160,7 +258,7 @@ cgrad(ITensor & B,
                 {
                 for(auto i = b.begin; i < b.end; ++i)
                     {
-                    auto& t = ts.at(i);
+                    auto& t = ts(i);
                     //
                     // The matrix A is like outer
                     // product of dag(v) and v, so
@@ -188,7 +286,7 @@ cgrad(ITensor & B,
                 {
                 for(auto i = b.begin; i < b.end; ++i)
                     {
-                    auto& t = ts.at(i);
+                    auto& t = ts(i);
                     auto P = B*t.v;
                     auto dP = deltas[t.l] - P;
                     tensors.at(b.n) += dP*dag(t.v);
@@ -228,8 +326,7 @@ cgrad(ITensor & B,
 //         
 void
 mldmrg(MPS & W,
-       MPSArr & trainmps,
-       vector<TState> & ts,
+       TrainStates & ts,
        Sweeps const& sweeps,
        ParallelDo const& parallel_do,
        Args const& args)
@@ -283,11 +380,10 @@ mldmrg(MPS & W,
                 {
                 for(auto i = b.begin; i < b.end; ++i)
                     {
-                    auto& t = ts.at(i);
-                    auto& tmps = *getTrainState(trainmps,t);
-                    t.v = tmps.A(c)*tmps.A(c+dc);
-                    if(lc > 0)   t.v *= t.E.at(lc);
-                    if(rc < N+1) t.v *= t.E.at(rc);
+                    auto& t = ts(i);
+                    t.v = t.A(c)*t.A(c+dc);
+                    if(lc > 0)   t.v *= ts.E(lc,i);
+                    if(rc < N+1) t.v *= ts.E(rc,i);
                     }
                 }
             );
@@ -349,18 +445,16 @@ mldmrg(MPS & W,
             {
             for(auto i = b.begin; i < b.end; ++i)
                 {
-                auto& t = ts.at(i);
-                auto& tmps = *getTrainState(trainmps,t);
-                auto& E = t.E;
+                auto& t = ts(i);
                 if(c == 1 || c == N) 
                     {
-                    E.at(c) = tmps.A(c)*W.A(c);
+                    ts.E(c,i) = t.A(c)*W.A(c);
                     }
                 else
                     {
-                    E.at(c) = E.at(c-dc)*(tmps.A(c)*W.A(c));
+                    ts.E(c,i) = ts.E(c-dc,i)*(t.A(c)*W.A(c));
                     }
-                E.at(c).scaleTo(1.);
+                ts.E(c,i).scaleTo(1.);
                 }
             });
 
@@ -453,7 +547,7 @@ main(int argc, const char* argv[])
     //
     // Local feature map (a lambda function)
     //
-    auto phi = [ftype,d](Real g, int n) -> Cplx
+    auto phi = [ftype,d](Real g, int n) -> Real
         {
         if(g < 0 || g > 255.) Error(format("Expected g=%f to be in [0,255]",g));
         auto x = g/255.;
@@ -474,17 +568,28 @@ main(int argc, const char* argv[])
         };
 
     println("Converting training set to MPS");
-    auto trainmps = MPSArr{};
+    auto ts = TrainStates(N);
     auto counts = array<int,10>{};
+    auto n = 1;
     for(auto& img : train)
         {
         auto l = img.label();
         if(counts[l] >= Ntrain) continue;
-        trainmps.at(l).push_back(makeMPS(sites,img,phi));
+        ts.ts_.emplace_back(n++,l,sites,img,phi);
         ++counts[l];
         }
-    auto totNtrain = stdx::accumulate(counts,0);
+    int totNtrain = ts.ts_.size();
     printfln("Total of %d training images",totNtrain);
+
+    //
+    //Visually inspect images to see if they look ok
+    //
+    n = 1;
+    for(auto& img : train)
+        {
+        writeGray(img,format("img%02d_L%d.png",n++,img.label()));
+        if(n > 10) break;
+        }
 
     Index L;
     MPS W;
@@ -534,52 +639,10 @@ main(int argc, const char* argv[])
     //
     // Setup parallel worker
     //
-    auto bounds = vector<Bound>(Nthread);
-    auto th_size = totNtrain/Nthread;
-    auto bcount = 0;
-    for(auto n : range(Nthread))
+    auto parallel_do = ParallelDo(Nthread,totNtrain);
+    for(auto& b : parallel_do.bounds())
         {
-        bounds.at(n) = Bound(n,bcount,bcount+th_size);
-        bcount += th_size;
-        }
-    bounds.back().end = totNtrain;
-    for(auto& b : bounds)
-        {
-        printfln("Thread %d %d -> %d (%d)",b.n,b.begin,b.end,b.end-b.begin);
-        }
-    auto parallel_do = ParallelDo{bounds};
-
-
-    //
-    // Setup ts (training state structs)
-    //
-    auto ts = vector<TState>(totNtrain);
-    auto nextLabel = [&labels](long start_at = -1)
-        {
-        static long nl = 0;
-        auto l = labels.at(nl);
-        if(start_at >= 0) { nl = start_at; return l; }
-        nl = (nl+1==(long)labels.size()) ? 0 : nl+1;
-        return l;
-        };
-    auto nextTrainN = [&labels,&trainmps](long l)
-        {
-        static auto ncount = array<size_t,10>{};
-        auto& set = trainmps.at(l);
-        auto& cl = ncount.at(l);
-        if(cl >= set.size()) return -1ul;
-        return cl++;
-        };
-
-    for(auto& t : ts)
-        {
-        long count = 0;
-        while(t.n == -1)
-            {
-            t.l = nextLabel();
-            t.n = nextTrainN(t.l);
-            if(++count > 20) Error("Infinite loop while setting up ts");
-            }
+        printfln("Thread %d %d -> %d (%d)",b.n,b.begin,b.end,b.size());
         }
 
     //
@@ -587,39 +650,9 @@ main(int argc, const char* argv[])
     // into environment of W MPS
     //
     print("Projecting training states...");
-    parallel_do(
-        [&](Bound b)
-            {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts.at(i);
-                auto& tmps = *getTrainState(trainmps,t);
-                auto& E = t.E;
-                E.resize(N+2);
-                E.at(N) = tmps.A(N)*W.A(N);
-                for(auto j = N-1; j >= 3; --j)
-                    {
-                    E.at(j) = (tmps.A(j)*W.A(j))*E.at(j+1);
-                    E.at(j).scaleTo(1.);
-                    }
-                }
-            }
-        );
+    ts.makeEs(parallel_do,W);
     println("done");
 
-    // Set up initial t.v tensors
-    parallel_do(
-        [&](Bound b)
-            {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts.at(i);
-                auto& tmps = *getTrainState(trainmps,t);
-                t.v = tmps.A(1)*tmps.A(2);
-                t.v *= t.E.at(3);
-                }
-            }
-        );
 
     auto C = quadcost(W.A(1)*W.A(2),ts,parallel_do,{"lambda",lambda});
     printfln("Before starting DMRG Cost = %.10f",C/totNtrain);
@@ -640,7 +673,7 @@ main(int argc, const char* argv[])
                      "Replace",replace
                     };
 
-    mldmrg(W,trainmps,ts,sweeps,parallel_do,args);
+    mldmrg(W,ts,sweeps,parallel_do,args);
 
     println("Writing W to disk");
     writeToFile("W",W);
