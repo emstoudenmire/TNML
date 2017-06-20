@@ -1,5 +1,7 @@
 Makefile
 
+*.swp
+
 # Applications
 fixedL
 single
