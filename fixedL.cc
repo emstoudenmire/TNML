@@ -26,7 +26,10 @@ struct TState
     vector<Real> data;
 
     template<typename Func>
-    TState(int n_, int l_, SiteSet const& sites, PImage const& img, Func const& phi)
+    TState(int n_, int l_, 
+           SiteSet const& sites, 
+           PImage const& img, 
+           Func const& phi)
       : sites_(sites),
         n(n_),
         l(l_) 
@@ -58,13 +61,19 @@ struct TState
 
     };
 
-struct TrainStates
+class TrainStates
     {
+    public:
     vector<TState> ts_;
     vector<vector<ITensor>> E_;
     int N = 0;
+    int l_ = 0; //left env built to here
+    int r_ = 0; //right env built to here
+    bool dirmade_ = false;
 
-    TrainStates(int N_) : N(N_) { }
+    TrainStates(int N_) 
+        : N(N_), r_(N+1) 
+        { }
 
     int
     size() const { return ts_.size(); }
@@ -73,7 +82,7 @@ struct TrainStates
     front() const { return ts_.front(); }
 
     void
-    makeEs(ParallelDo & pd, MPS const& W)
+    makeEs(ParallelDo const& pd, MPS const& W)
         {
         E_.resize(2+N);
         for(auto n : range1(N))
@@ -85,16 +94,102 @@ struct TrainStates
             for(auto i = b.begin; i < b.end; ++i)
                 {
                 auto& t = ts_.at(i);
-                E_.at(N).at(i) = t.A(N)*W.A(N);
+                E(N,i) = t.A(N)*W.A(N);
                 for(auto j = N-1; j >= 3; --j)
                     {
-                    E_.at(j).at(i) = (t.A(j)*W.A(j))*E_.at(j+1).at(i);
-                    E_.at(j).at(i).scaleTo(1.);
+                    E(j,i) = (t.A(j)*W.A(j))*E(j+1,i);
+                    E(j,i).scaleTo(1.);
                     }
                 t.v = t.A(1)*t.A(2);
-                t.v *= E_.at(3).at(i);
+                t.v *= E(3,i);
                 }
             });
+        }
+
+    void
+    shiftE(ParallelDo const& pd, 
+           MPS const& W,
+           int b, Direction dir)
+        {
+        auto c = (dir==Fromleft) ? b : b+1;
+        auto dc = (dir==Fromleft) ? +1 : -1;
+        pd([&](Bound b)
+            {
+            for(auto i = b.begin; i < b.end; ++i)
+                {
+                auto& t = ts_.at(i);
+                if(c == 1 || c == N) 
+                    {
+                    E(c,i) = t.A(c)*W.A(c);
+                    }
+                else
+                    {
+                    E(c,i) = E(c-dc,i)*(t.A(c)*W.A(c));
+                    }
+                E(c,i).scaleTo(1.);
+                }
+            });
+        auto nE = (c+3*dc);
+        if(nE >= 1 && nE <= N)
+            {
+            if(not E_.at(nE).empty()) Error("Tried to read env twice");
+            readFromFile(format("%s/E%03d",writeDir(),nE),E_.at(nE));
+            if(nE > r_) r_ = nE;
+            if(nE < l_) l_ = nE;
+            }
+        }
+
+    void
+    setBond(int b, ParallelDo const& pd)
+        {
+        if(not dirmade_)
+            {
+            auto cmd = "mkdir -p "+writeDir();
+            std::system(cmd.c_str());
+            dirmade_ = true;
+            }
+        //printfln("b=%d, l_=%d, r_=%d",b,l_,r_);
+        while(l_ < b-1)
+            {
+            if(not E_.at(l_).empty())
+                {
+                //printfln("Writing file E%03d (left)",l_);
+                writeToFile(format("%s/E%03d",writeDir(),l_),E_.at(l_));
+                E_.at(l_).clear();
+                }
+            l_ += 1;
+            }
+        while(r_ > b+2)
+            {
+            if(not E_.at(r_).empty())
+                {
+                //printfln("Writing file E%03d (right)",r_);
+                writeToFile(format("%s/E%03d",writeDir(),r_),E_.at(r_));
+                E_.at(r_).clear();
+                }
+            r_ -= 1;
+            }
+        //
+        // Make effective image (4 site) tensors
+        // Store in t.v of each elem t of ts
+        //
+        auto lc = b-1;
+        auto rc = b+2;
+        pd([&](Bound b)
+                {
+                for(auto i = b.begin; i < b.end; ++i)
+                    {
+                    auto& t = ts_.at(i);
+                    t.v = t.A(lc+1)*t.A(rc-1);
+                    if(lc > 0)   t.v *= E(lc,i);
+                    if(rc < N+1) t.v *= E(rc,i);
+                    }
+                }
+            );
+        //print("E sizes:");
+        //for(auto& e : E_) print(" ",e.size());
+        //println();
+        //PAUSE
         }
 
     TState const&
@@ -361,6 +456,8 @@ mldmrg(MPS & W,
         auto lc = min(c,c+dc)-1;
         auto rc = max(c,c+dc)+1;
 
+        ts.setBond(b,parallel_do);
+
         printfln("Sweep %d Half %d Bond %d",sw,ha,c);
 
         // Save old bond tensor
@@ -371,22 +468,6 @@ mldmrg(MPS & W,
         auto B = oB;
         B.scaleTo(1.);
 
-        //
-        // Make effective image (4 site) tensors
-        // Store in t.v of each elem t of ts
-        //
-        parallel_do(
-            [&](Bound b)
-                {
-                for(auto i = b.begin; i < b.end; ++i)
-                    {
-                    auto& t = ts(i);
-                    t.v = t.A(c)*t.A(c+dc);
-                    if(lc > 0)   t.v *= ts.E(lc,i);
-                    if(rc < N+1) t.v *= ts.E(rc,i);
-                    }
-                }
-            );
 
         //
         // Optimize bond tensor B
@@ -440,23 +521,8 @@ mldmrg(MPS & W,
         // i.e. projection of training images into current "wings"
         // of the MPS W
         //
-        parallel_do(
-            [&](Bound b)
-            {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts(i);
-                if(c == 1 || c == N) 
-                    {
-                    ts.E(c,i) = t.A(c)*W.A(c);
-                    }
-                else
-                    {
-                    ts.E(c,i) = ts.E(c-dc,i)*(t.A(c)*W.A(c));
-                    }
-                ts.E(c,i).scaleTo(1.);
-                }
-            });
+        ts.shiftE(parallel_do,W,
+                  b,ha==1?Fromleft:Fromright);
 
         if(fileExists("WRITE_WF"))
             {
@@ -558,7 +624,7 @@ main(int argc, const char* argv[])
                 println("d must be 2 for normal feature map");
                 EXIT
                 }
-            return n==1 ? cos(Pi/2.*x) : sin(Pi/2.*x);
+            return n==1 ? cos(0.5*Pi*x) : sin(0.5*Pi*x);
             }
         else if(ftype == Series)
             {
@@ -634,6 +700,8 @@ main(int argc, const char* argv[])
     println("Done making initial W");
     writeToFile("W",W);
 
+    train.clear(); //to save memory
+
     if(!findtype(W.A(c),Label)) Error(format("Label Index not on site %d",c));
 
     //
@@ -657,7 +725,6 @@ main(int argc, const char* argv[])
     auto C = quadcost(W.A(1)*W.A(2),ts,parallel_do,{"lambda",lambda});
     printfln("Before starting DMRG Cost = %.10f",C/totNtrain);
 
-    train.clear(); //to save memory
 
     auto sweeps = Sweeps(Nsweep);
     sweeps.maxm() = maxm;
