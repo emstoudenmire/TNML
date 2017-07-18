@@ -20,7 +20,7 @@ struct TState
     SiteSet const& sites_;
     bool active = true;
     long n = -1;
-    int l = NL;
+    int l = -1;
     int d = 0;
     ITensor v;
     vector<Real> data;
@@ -65,148 +65,53 @@ class TrainStates
     {
     public:
     vector<TState> ts_;
-    vector<vector<ITensor>> E_;
+    //vector<ITensor> LE_,RE_;
     int N = 0;
-    int l_ = 0; //left env built to here
-    int r_ = 0; //right env built to here
+    int currb_ = -1; //left env built to here
     bool dirmade_ = false;
+    int Nbatch_ = 1;
+    int batchSize_ = 0;
+    int Nthread_ = 1;
+    ParallelDo pd_;
 
-    TrainStates(int N_) 
-        : N(N_), r_(N+1) 
-        { }
+    TrainStates(vector<TState> && ts,
+                int N_, int Nthread, int Nbatch = 1)
+      : ts_(move(ts)),
+        N(N_), 
+        Nbatch_(Nbatch),
+        Nthread_(Nthread)
+        { 
+        int totNtrain = ts_.size();
+        if(totNtrain%Nbatch != 0)
+            {
+            printfln("totNtrain=%d, Nbatch=%d, totNtrain%Nbatch=%d",
+                     totNtrain, Nbatch, totNtrain%Nbatch);
+            Error("totNtrain not commensurate with Nbatch");
+            }
+        batchSize_ = totNtrain/Nbatch;
+        pd_ = ParallelDo(Nthread,batchSize_);
+        for(auto& b : pd_.bounds())
+            {
+            printfln("Thread %d %d -> %d (%d)",b.n,b.begin,b.end,b.size());
+            }
+        }
 
     int
     size() const { return ts_.size(); }
 
+    int
+    Nthread() const { return Nthread_; }
+
     TState const& 
     front() const { return ts_.front(); }
-
-    void
-    makeEs(ParallelDo const& pd, MPS const& W)
-        {
-        E_.resize(2+N);
-        for(auto n : range1(N))
-            {
-            E_.at(n).resize(ts_.size());
-            }
-        pd([&](Bound b)
-            {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts_.at(i);
-                E(N,i) = t.A(N)*W.A(N);
-                for(auto j = N-1; j >= 3; --j)
-                    {
-                    E(j,i) = (t.A(j)*W.A(j))*E(j+1,i);
-                    E(j,i).scaleTo(1.);
-                    }
-                t.v = t.A(1)*t.A(2);
-                t.v *= E(3,i);
-                }
-            });
-        }
-
-    void
-    shiftE(ParallelDo const& pd, 
-           MPS const& W,
-           int b, Direction dir)
-        {
-        auto c = (dir==Fromleft) ? b : b+1;
-        auto dc = (dir==Fromleft) ? +1 : -1;
-        pd([&](Bound b)
-            {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts_.at(i);
-                if(c == 1 || c == N) 
-                    {
-                    E(c,i) = t.A(c)*W.A(c);
-                    }
-                else
-                    {
-                    E(c,i) = E(c-dc,i)*(t.A(c)*W.A(c));
-                    }
-                E(c,i).scaleTo(1.);
-                }
-            });
-        auto nE = (c+3*dc);
-        if(nE >= 1 && nE <= N)
-            {
-            if(not E_.at(nE).empty()) Error("Tried to read env twice");
-            readFromFile(format("%s/E%03d",writeDir(),nE),E_.at(nE));
-            if(nE > r_) r_ = nE;
-            if(nE < l_) l_ = nE;
-            }
-        }
-
-    void
-    setBond(int b, ParallelDo const& pd)
-        {
-        if(not dirmade_)
-            {
-            auto cmd = "mkdir -p "+writeDir();
-            std::system(cmd.c_str());
-            dirmade_ = true;
-            }
-        //printfln("b=%d, l_=%d, r_=%d",b,l_,r_);
-        while(l_ < b-1)
-            {
-            if(not E_.at(l_).empty())
-                {
-                //printfln("Writing file E%03d (left)",l_);
-                writeToFile(format("%s/E%03d",writeDir(),l_),E_.at(l_));
-                E_.at(l_).clear();
-                }
-            l_ += 1;
-            }
-        while(r_ > b+2)
-            {
-            if(not E_.at(r_).empty())
-                {
-                //printfln("Writing file E%03d (right)",r_);
-                writeToFile(format("%s/E%03d",writeDir(),r_),E_.at(r_));
-                E_.at(r_).clear();
-                }
-            r_ -= 1;
-            }
-        //
-        // Make effective image (4 site) tensors
-        // Store in t.v of each elem t of ts
-        //
-        auto lc = b-1;
-        auto rc = b+2;
-        pd([&](Bound b)
-                {
-                for(auto i = b.begin; i < b.end; ++i)
-                    {
-                    auto& t = ts_.at(i);
-                    t.v = t.A(lc+1)*t.A(rc-1);
-                    if(lc > 0)   t.v *= E(lc,i);
-                    if(rc < N+1) t.v *= E(rc,i);
-                    }
-                }
-            );
-        //print("E sizes:");
-        //for(auto& e : E_) print(" ",e.size());
-        //println();
-        //PAUSE
-        }
 
     TState const&
     operator()(int i) const { return ts_.at(i); }
     TState &
     operator()(int i) { return ts_.at(i); }
 
-    ITensor&
-    E(int x, int nt)
-        {
-        return E_.at(x).at(nt);
-        }
-    ITensor const&
-    E(int x, int nt) const
-        {
-        return E_.at(x).at(nt);
-        }
+    TState const&
+    getState(int i) const { return ts_.at(i); }
 
     static string&
     writeDir() 
@@ -214,6 +119,158 @@ class TrainStates
         static string wd = "proj_images";
         return wd;
         }
+
+    void
+    init(MPS const& W)
+        {
+        if(not dirmade_)
+            {
+            auto cmd = "mkdir -p "+writeDir();
+            std::system(cmd.c_str());
+            dirmade_ = true;
+            }
+        auto nextE = vector<ITensor>(batchSize_);
+        auto currE = vector<ITensor>(batchSize_);
+        for(auto bn : range(Nbatch_))
+            {
+            auto batchStart = bn*Nbatch_;
+            for(auto n = N; n >= 3; --n)
+                {
+                pd_([&](Bound b){
+                for(auto i = b.begin; i < b.end; ++i)
+                    {
+                    auto& t = ts_.at(batchStart+i);
+                    if(n == N)
+                        {
+                        nextE.at(i) = (t.A(n)*W.A(n));
+                        }
+                    else
+                        {
+                        nextE.at(i) = (t.A(n)*W.A(n))*currE.at(i);
+                        }
+                    nextE[i].scaleTo(1.);
+                    }});
+                currE.swap(nextE);
+                writeToFile(fname(bn,n),currE);
+                }
+            }
+        setBond(1);
+        }
+
+    void
+    setBond(int b)
+        {
+        if(currb_ == b) return;
+        currb_ = b;
+        auto lc = b-1;
+        auto rc = b+2;
+        auto useL = (lc > 0);
+        auto useR = (rc < N+1);
+        //TODO: don't realloc on every setBond call
+        vector<ITensor> LE,RE;
+        if(useL) LE = vector<ITensor>(batchSize_);
+        if(useR) RE = vector<ITensor>(batchSize_);
+        // Make effective image (4 site) tensors
+        // Store in t.v of each elem t of ts
+        for(auto bn : range(Nbatch_))
+            {
+            auto batchStart = bn*Nbatch_;
+            if(useL) readFromFile(fname(bn,lc),LE);
+            if(useR) readFromFile(fname(bn,rc),RE);
+            pd_([&](Bound b){
+            for(auto i = b.begin; i < b.end; ++i)
+                {
+                auto& t = ts_.at(batchStart+i);
+                t.v = t.A(lc+1)*t.A(rc-1);
+                if(useL) t.v *= LE.at(i);
+                if(useR) t.v *= RE.at(i);
+                }});
+            }
+        LE.clear();
+        RE.clear();
+        }
+
+    void
+    shiftE(MPS const& W,
+           int b, Direction dir)
+        {
+        auto c = (dir==Fromleft) ? b : b+1;
+        auto dc = (dir==Fromleft) ? +1 : -1;
+
+        auto prevc = (dir==Fromleft) ? b-1 : b+2;
+        auto hasPrev = (prevc >= 1 && prevc <= N);
+
+        if(hasPrev)
+            {
+            printfln("## Advancing E from %d to %d",prevc,c);
+            }
+        else
+            {
+            printfln("## Making new E at %d",c);
+            }
+        vector<ITensor> prevE;
+        if(hasPrev) prevE = vector<ITensor>(batchSize_);
+        auto nextE = vector<ITensor>(batchSize_);
+        for(auto bn : range(Nbatch_))
+            {
+            auto batchStart = bn*Nbatch_;
+            if(hasPrev) readFromFile(fname(bn,prevc),prevE);
+            pd_([&](Bound b){
+            for(auto i = b.begin; i < b.end; ++i)
+                {
+                auto& t = ts_.at(batchStart+i);
+                if(not hasPrev)
+                    {
+                    nextE.at(i) = t.A(c)*W.A(c);
+                    }
+                else
+                    {
+                    nextE.at(i) = prevE.at(i)*(t.A(c)*W.A(c));
+                    }
+                nextE.at(i).scaleTo(1.);
+                }});
+            writeToFile(fname(bn,c),nextE);
+            }
+        }
+
+
+    template<typename Func>
+    void
+    execute(Func && f) const
+        {
+        for(auto bn : range(Nbatch_))
+            {
+            auto batchStart = bn*Nbatch_;
+            pd_([&f,batchStart,this](Bound b)
+                {
+                //printfln("B %d %d->%d",b.n,b.begin,b.end);
+                for(auto i = batchStart+b.begin; i < batchStart+b.end; ++i)
+                    {
+                    auto& t = getState(i);
+                    f(b.n,t);
+                    }
+                });
+            }
+        }
+
+    private:
+
+    string
+    fname(int nb, int j)
+        {
+        return format("%s/B%03dE%05d",writeDir(),nb,j);
+        }
+
+    //ITensor&
+    //E(int x, int nt)
+    //    {
+    //    return E_.at(x).at(nt);
+    //    }
+    //ITensor const&
+    //E(int x, int nt) const
+    //    {
+    //    return E_.at(x).at(nt);
+    //    }
 
     };
 
@@ -224,7 +281,6 @@ class TrainStates
 Real
 quadcost(ITensor B,
          TrainStates const& ts,
-         ParallelDo const& parallel_do,
          Args const& args = Args::global())
     {
     auto NT = ts.size();
@@ -252,34 +308,25 @@ quadcost(ITensor B,
     auto reals = array<vector<Real>,10ul>{};
     for(auto l : range(10))
         {
-        reals[l] = vector<Real>(parallel_do.Nthread(),0.);
+        reals[l] = vector<Real>(ts.Nthread(),0.);
         }
-    auto ints = vector<int>(parallel_do.Nthread(),0);
+    auto ints = vector<int>(ts.Nthread(),0);
     //
 
-    parallel_do(
-        [&](Bound b)
+    ts.execute([&](int nt, TState const& t)
+        {
+        auto weights = array<Real,10>{};
+        auto P = B*t.v;
+        auto dP = deltas[t.l] - P;
+        reals[t.l].at(nt) += sqr(norm(dP));
+        for(auto l : range(10))
             {
-            auto weights = array<Real,10>{};
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts(i);
-                // P is the model output
-                auto P = B*t.v;
-                // deltas[t.l] is the ideal output vector
-                // (one-hot encoding) for the training state t
-                auto dP = deltas[t.l] - P;
-                // cost is square of dP
-                reals[t.l].at(b.n) += sqr(norm(dP));
-                // save all outputs to check if t correctly classified
-                for(auto k : range(10))
-                    {
-                    weights[k] = std::abs(P.real(L(1+k)));
-                    }
-                if(t.l == argmax(weights)) ints[b.n] += 1;
-                }
+            weights[l] = std::abs(P.real(L(1+l)));
             }
-        );
+        //print(t.n,": "); for(auto w : weights) print(" ",w); println();
+        if(t.l == argmax(weights)) ints.at(nt) += 1;
+        });
+
     auto CR = lambda*sqr(norm(B));
     auto C = 0.;
     for(auto l : range(10))
@@ -290,11 +337,10 @@ quadcost(ITensor B,
         }
     if(showlabels) printfln("  Reg. cost CR = %.10f",CR/NT);
     C += CR;
-
     auto ncor = stdx::accumulate(ints,0);
-    auto ninc = (ts.size()-ncor);
-    printfln("Percent correct = %.4f%%, # incorrect = %d/%d",ncor*100./ts.size(),ninc,ncor+ninc);
-
+    auto ninc = (NT-ncor);
+    printfln("Percent correct = %.4f%%, # incorrect = %d/%d",
+             ncor*100./NT,ninc,ncor+ninc);
     return C;
     }
 
@@ -304,13 +350,13 @@ quadcost(ITensor B,
 void
 cgrad(ITensor & B,
       TrainStates & ts,
-      ParallelDo const& parallel_do, 
       Args const& args)
     {
     auto NT = ts.size();
     auto Npass = args.getInt("Npass");
     auto lambda = args.getReal("lambda",0.);
     auto cconv = args.getReal("cconv",1E-10);
+    printfln("In cgrad, lambda = %.3E",lambda);
 
     auto L = findtype(B,Label);
     if(!L) L = findtype(ts.front().v,Label);
@@ -320,25 +366,23 @@ cgrad(ITensor & B,
     for(auto l : range(10)) deltas[l] = setElt(L(1+l));
 
     //Workspace for parallel ops
-    auto Nthread = parallel_do.Nthread();
+    auto Nthread = ts.Nthread();
     auto tensors = vector<ITensor>(Nthread);
     auto reals = vector<Real>(Nthread);
     auto ints = vector<int>(Nthread);
 
     // Compute initial gradient
     for(auto& T : tensors) T = ITensor{};
-    parallel_do(
-        [&](Bound b)
+    ts.execute([&](int nt, TState const& t)
             {
-            for(auto i = b.begin; i < b.end; ++i)
-                {
-                auto& t = ts(i);
-                auto P = B*t.v;
-                auto dP = deltas[t.l] - P;
-                tensors.at(b.n) += dP*dag(t.v);
-                }
-            }
-        );
+            auto P = B*t.v;
+            auto dP = deltas[t.l] - P;
+            tensors.at(nt) += dP*dag(t.v);
+            });
+    //for(auto n : range(tensors))
+    //    {
+    //    printfln("tensors[%d] = %s\n",n,tensors.at(n));
+    //    }
     auto r = stdx::accumulate(tensors,ITensor{});
     if(lambda != 0.) r = r - lambda*B;
 
@@ -348,22 +392,14 @@ cgrad(ITensor & B,
         println("  Conj grad pass ",pass);
         // Compute p*A*p
         for(auto& r : reals) r = 0.;
-        parallel_do(
-            [&](Bound b)
-                {
-                for(auto i = b.begin; i < b.end; ++i)
-                    {
-                    auto& t = ts(i);
-                    //
-                    // The matrix A is like outer
-                    // product of dag(v) and v, so
-                    // dag(p)*A*p is |p*v|^2
-                    // 
-                    auto pv = p*t.v;
-                    reals.at(b.n) += sqr(norm(pv));
-                    }
-                }
-            );
+        ts.execute([&](int nt, TState const& t)
+            {
+            // The matrix A is like outer
+            // product of dag(v) and v, so
+            // dag(p)*A*p is |p*v|^2
+            auto pv = p*t.v;
+            reals.at(nt) += sqr(norm(pv));
+            });
         auto pAp = stdx::accumulate(reals,0.);
         pAp += lambda*sqr(norm(p));
 
@@ -376,19 +412,13 @@ cgrad(ITensor & B,
         // Compute new gradient and cost function
         for(auto& T : tensors) T = ITensor();
         for(auto& r : reals) r = 0.;
-        parallel_do(
-            [&](Bound b)
-                {
-                for(auto i = b.begin; i < b.end; ++i)
-                    {
-                    auto& t = ts(i);
-                    auto P = B*t.v;
-                    auto dP = deltas[t.l] - P;
-                    tensors.at(b.n) += dP*dag(t.v);
-                    reals.at(b.n) += sqr(norm(dP));
-                    }
-                }
-            );
+        ts.execute([&](int nt, TState const& t)
+            {
+            auto P = B*t.v;
+            auto dP = deltas[t.l] - P;
+            tensors.at(nt) += dP*dag(t.v);
+            reals.at(nt) += sqr(norm(dP));
+            });
         auto nr = stdx::accumulate(tensors,ITensor{});
         if(lambda != 0.) nr = nr - lambda*B;
         auto beta = sqr(norm(nr)/norm(r));
@@ -423,16 +453,16 @@ void
 mldmrg(MPS & W,
        TrainStates & ts,
        Sweeps const& sweeps,
-       ParallelDo const& parallel_do,
-       Args const& args)
+       Args args)
     {
     auto N = W.N();
     auto NT = ts.size();
 
     auto method = args.getString("Method");
     auto replace = args.getBool("Replace",false);
+    auto pause_step = args.getBool("PauseStep",false);
 
-    auto Nthread = parallel_do.Nthread();
+    auto Nthread = ts.Nthread();
     auto reals = vector<Real>(Nthread);
 
     auto cargs = Args{args,"Normalize",false};
@@ -453,10 +483,10 @@ mldmrg(MPS & W,
         auto c = (ha==1) ? b : b+1;
         auto dc = (ha==1) ? +1 : -1;
 
-        auto lc = min(c,c+dc)-1;
-        auto rc = max(c,c+dc)+1;
+        //auto lc = min(c,c+dc)-1;
+        //auto rc = max(c,c+dc)+1;
 
-        ts.setBond(b,parallel_do);
+        ts.setBond(b);
 
         printfln("Sweep %d Half %d Bond %d",sw,ha,c);
 
@@ -472,7 +502,7 @@ mldmrg(MPS & W,
         //
         // Optimize bond tensor B
         //
-        if(method == "conj") cgrad(B,ts,parallel_do,args);
+        if(method == "conj") cgrad(B,ts,args);
         else Error(format("method type \"%s\" not recognized",method));
 
         //
@@ -480,9 +510,9 @@ mldmrg(MPS & W,
         //
         printfln("Sweep %d Half %d Bond %d",sw,ha,c);
 
-        auto oC = quadcost(oB,ts,parallel_do,cargs);
-        auto C = quadcost(B,ts,parallel_do,cargs);
-        printfln("Cost = %.10f -> %.10f",oC/NT,C/NT);
+        //auto oC = quadcost(oB,ts,cargs);
+        //auto C = quadcost(B,ts,cargs);
+        //printfln("Cost = %.10f -> %.10f",oC/NT,C/NT);
 
         //
         // SVD B back apart into MPS tensors
@@ -498,31 +528,17 @@ mldmrg(MPS & W,
         auto newB = W.A(c)*W.A(c+dc);
         Print(norm(newB));
         printfln("rank(newB) = %d",rank(newB));
+        printfln("|B-newB| = %.3E",norm(B-newB));
 
-        auto newC = quadcost(newB,ts,parallel_do,{cargs,"ShowLabels",true});
+        auto newC = quadcost(newB,ts,{cargs,"ShowLabels",true});
         printfln("--> After SVD, Cost = %.10f",newC/NT);
-
-        if(replace)
-            {
-            if(newC > oC)
-                {
-                //println(" == New C is higher, using old B == ");
-                //PAUSE
-                auto spec = svd(oB,W.Aref(c),S,W.Aref(c+dc),svd_args);
-                W.Aref(c+dc) *= S;
-                newB = W.A(c)*W.A(c+dc);
-                newC = quadcost(newB,ts,parallel_do,{cargs,"ShowLabels",true});
-                printfln("--> After replacement, Cost = %.10f",newC/NT);
-                }
-            }
 
         //
         // Update E's (MPS environment tensors)
         // i.e. projection of training images into current "wings"
         // of the MPS W
         //
-        ts.shiftE(parallel_do,W,
-                  b,ha==1?Fromleft:Fromright);
+        ts.shiftE(W,b,ha==1?Fromleft:Fromright);
 
         if(fileExists("WRITE_WF"))
             {
@@ -531,6 +547,19 @@ mldmrg(MPS & W,
             println("Writing W to disk");
             writeToFile("W",W);
             }
+
+        if(fileExists("LAMBDA"))
+            {
+            auto lf = std::ifstream("LAMBDA");
+            Real lambda = 0.;
+            lf >> lambda;
+            lf.close();
+            args.add("lambda",lambda);
+            system("rm -f LAMBDA");
+            println("new lambda = ",lambda);
+            }
+
+        if(pause_step) PAUSE;
 
         } //loop over c,dc
 
@@ -555,9 +584,10 @@ main(int argc, const char* argv[])
        }
     auto input = InputGroup(argv[1],"input");
 
+    int d = 2;
     auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
-    auto d = input.getInt("d",2);
     auto Ntrain = input.getInt("Ntrain",60000);
+    auto Nbatch = input.getInt("Nbatch",10);
     auto Nsweep = input.getInt("Nsweep",50);
     auto imglen = input.getInt("imglen",14);
     auto cutoff = input.getReal("cutoff",1E-10);
@@ -566,7 +596,8 @@ main(int argc, const char* argv[])
     auto ninitial = input.getInt("ninitial",100);
     auto Nthread = input.getInt("nthread",1);
     auto replace = input.getYesNo("replace",false);
-    auto feature = input.getString("feature","normal");
+    auto pause_step = input.getYesNo("pause_step",false);
+    //auto feature = input.getString("feature","normal");
 
     //Cost function settings
     auto lambda = input.getReal("lambda",0.);
@@ -578,14 +609,6 @@ main(int argc, const char* argv[])
     auto Npass = input.getInt("Npass",4);
     auto cconv = input.getReal("cconv",1E-10);
 
-    enum Feature { Normal, Series };
-    auto ftype = Normal;
-    if(feature == "normal") { ftype = Normal; }
-    else if(feature == "series") { ftype = Series; }
-    else
-        {
-        Error(format("feature=%s not recognized",feature));
-        }
 
     auto labels = array<long,NL>{{0,1,2,3,4,5,6,7,8,9}};
 
@@ -614,39 +637,28 @@ main(int argc, const char* argv[])
     //
     // Local feature map (a lambda function)
     //
-    auto phi = [ftype,d](Real g, int n) -> Real
+    auto phi = [d](Real g, int n) -> Real
         {
         if(g < 0 || g > 255.) Error(format("Expected g=%f to be in [0,255]",g));
         auto x = g/255.;
-        if(ftype == Normal)
-            {
-            if(d != 2)
-                {
-                println("d must be 2 for normal feature map");
-                EXIT
-                }
-            return n==1 ? cos(0.5*Pi*x) : sin(0.5*Pi*x);
-            }
-        else if(ftype == Series)
-            {
-            return pow(x/4.,n-1);
-            }
-        return 0.;
+        return pow(x/4.,n-1);
         };
 
     println("Converting training set to MPS");
-    auto ts = TrainStates(N);
+    auto states = vector<TState>();
     auto counts = array<int,10>{};
     auto n = 1;
     for(auto& img : train)
         {
         auto l = img.label();
         if(counts[l] >= Ntrain) continue;
-        ts.ts_.emplace_back(n++,l,sites,img,phi);
+        states.emplace_back(n++,l,sites,img,phi);
         ++counts[l];
         }
-    int totNtrain = ts.ts_.size();
+    int totNtrain = states.size();
     printfln("Total of %d training images",totNtrain);
+
+    auto ts = TrainStates(move(states),N,Nthread,Nbatch);
 
     //
     //Visually inspect images to see if they look ok
@@ -670,6 +682,26 @@ main(int argc, const char* argv[])
             printfln("Expected W to have Label type Index at site %d",c);
             EXIT
             }
+        }
+    else if(fileExists("W0"))
+        {
+        println("Found separate W0,W1,...,W9 MPS: summing");
+        L = Index("L",10,Label);
+        auto Lval = [&L](long n){ return L(1+n); };
+        auto ipsis = vector<MPS>(labels.size());
+        for(auto n : range(labels))
+            {
+            auto& in = ipsis.at(n);
+            in = readFromFile<MPS>(format("W%d",n));
+            //in.position(1);
+            in.Aref(c) *= setElt(Lval(labels[n]));
+            //PrintData(in.A(c));
+            }
+        printfln("Summing all %d label states together",ipsis.size());
+        W = sum(ipsis,{"Cutoff",1E-10});
+        Print(W.A(c));
+        println("Done making initial W");
+        writeToFile("W",W);
         }
     else
         {
@@ -696,41 +728,29 @@ main(int argc, const char* argv[])
         W = sum(ipsis,{"Cutoff",1E-8,"Maxm",10});
         W.Aref(c) /= norm(W.A(c));
         println("Done making initial W");
+        writeToFile("W",W);
         }
     Print(overlap(W,W));
     println("Done making initial W");
-    writeToFile("W",W);
 
     train.clear(); //to save memory
 
     if(!findtype(W.A(c),Label)) Error(format("Label Index not on site %d",c));
 
     //
-    // Setup parallel worker
-    //
-    auto parallel_do = ParallelDo(Nthread,totNtrain);
-    for(auto& b : parallel_do.bounds())
-        {
-        printfln("Thread %d %d -> %d (%d)",b.n,b.begin,b.end,b.size());
-        }
-
-    //
     // Project training states (product states)
     // into environment of W MPS
     //
     print("Projecting training states...");
-    ts.makeEs(parallel_do,W);
+    ts.init(W);
     println("done");
 
-
-    auto C = quadcost(W.A(1)*W.A(2),ts,parallel_do,{"lambda",lambda});
+    println("Calling quadcost...");
+    auto C = quadcost(W.A(1)*W.A(2),ts,{"lambda",lambda});
     printfln("Before starting DMRG Cost = %.10f",C/totNtrain);
+    if(pause_step) PAUSE;
 
-
-    auto sweeps = Sweeps(Nsweep);
-    sweeps.maxm() = maxm;
-    sweeps.cutoff() = cutoff;
-    sweeps.minm() = minm;
+    auto sweeps = Sweeps(Nsweep,minm,maxm,cutoff);
 
     auto args = Args{"lambda",lambda,
                      "Method",method,
@@ -738,10 +758,11 @@ main(int argc, const char* argv[])
                      "alpha",alpha,
                      "clip",clip,
                      "cconv",cconv,
-                     "Replace",replace
+                     "Replace",replace,
+                     "PauseStep",pause_step
                     };
 
-    mldmrg(W,ts,sweeps,parallel_do,args);
+    mldmrg(W,ts,sweeps,args);
 
     println("Writing W to disk");
     writeToFile("W",W);

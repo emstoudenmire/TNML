@@ -23,6 +23,8 @@ class ParallelDo
     vector<Bound> bounds_;
     public:
 
+    ParallelDo() { } 
+
     ParallelDo(vector<Bound> const& bs)
       : bounds_(bs)
         { }
@@ -53,7 +55,7 @@ class ParallelDo
         const auto Nf = 16ul;
         if(bounds_.size() > Nf) Error("Need to increase size of futs");
         auto futs = std::array<std::future<void>,Nf>{};
-        auto task = move(T);
+        auto task = std::move(T);
         for(auto& b : bounds_)
             {
             futs.at(b.n) = std::async(std::launch::async,task,b);
