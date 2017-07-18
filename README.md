@@ -54,11 +54,11 @@ See below for a list of the possible input parameters to these programs and what
 
 One difference from the algorithm described in the paper is that the label index always remains on the same MPS tensor and is not moved around (although it can be moved, keeping it in a fixed position turns helps with the optimization).
 
-Warning: fixedL can use a lot of RAM. Recommended for systems with at least 16Gb of RAM, and even more could be useful.
+Warning: fixedL can use a lot of RAM. If this happens, adjust the Nbatch parameter described below to make the program read smaller amounts of data into ram at each step.
 
 Input parameters:
 - imglen (integer) [default: 14]: linear dimension of images to use for training and testing. Try imglen=8 for testing the basic ideas; performance can be surprisingly good even for images shrunk down to this size. imglen=28 is the native size of MNIST images.
-- Nthread (integer) [default: 1]: number of threads to use to parallelize gradient calculations. Not recommended to set this larger than number of cores on your processor.
+- nthread (integer) [default: 1]: number of threads to use to parallelize gradient calculations. Not recommended to set this larger than number of cores on your processor.
 - Npass (integer) [default: 4]: maximum number of conjugate gradient passes to do at each bond.
 - Nsweep (integer) [default: 50]: total number of sweeps (left-to-right passes over the MPS) to do.
 - lambda (real) [default: 0.0]: size of the L2 (ridge) regularization penalty to include in the cost function
@@ -69,6 +69,7 @@ Input parameters:
 - feature (string) [default: normal]: local feature map type to use. "normal" means the [cos(pi/2*x), sin(pi/2*x)] local feature map. "series" uses the feature map [1,x/4] (motivated by the Novikov et al. paper).
 - ninitial (integer) [default: 100]: number of training states per label type to use to make the initial MPS by summing training MPS together
 - replace (string: "yes" or "no") [default: no]: experimental feature which if set to "yes" will replace the new bond tensor with the old one if the cost function goes up when using the new bond tensor. This can happen if SVD'ing the new bond tensor causes too big of an approximation and makes the cost function rise.
+- Nbatch (integer) [default: 10]: number of "batches" into which to divide the "environment" tensors (i.e. the tensors representing each image projected into the "wings" of the weight MPS). These environment tensors can take a huge amount of RAM and so fixedL stores most of them on the hard disk (in the proj\_images folder) and only reads them into memory in batches. By increasing the number of batches you can make the code read fewer environments into memory at a time.
 
 There are other input parameters of a more experimental nature, but the ones above are the most important.
 
