@@ -15,6 +15,7 @@ main(int argc, char* argv[])
        }
     auto input = InputGroup(argv[1],"input");
 
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
     const auto L = input.getInt("label",0);
     auto Ntrain = input.getInt("Ntrain",60000);
     auto Nsweep = input.getInt("Nsweep",50);
@@ -53,7 +54,7 @@ main(int argc, char* argv[])
     auto Wname = format("W%d",L);
     auto labels = array<long,NL>{{0,1,2,3,4,5,6,7,8,9}};
 
-    auto data = getData();
+    auto data = getData(datadir);
     auto train = getAllMNIST(data,{"Type",Train,"imglen",imglen});
 
     auto N = train.front().size();

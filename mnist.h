@@ -4,21 +4,19 @@
 
 
 auto inline
-getData()
+getData(std::string datadir)
     {
-    auto home = getenv("HOME");
-    return mnist::read_dataset<std::vector, std::vector, uint8_t, uint8_t>(0,0,
-            itensor::format("%s/software/mpsml/CppMNIST",home).c_str());
+    return mnist::read_dataset<std::vector, std::vector, uint8_t, uint8_t>(0,0, datadir);
     }
 
 //DataSet == MNIST_dataset
-using DataSet = stdx::decay_t<decltype(getData())>;
+using DataSet = stdx::decay_t<decltype(getData(""))>;
 //ImagesT == vector<vector<uint8_t>>
-using ImagesT = stdx::decay_t<decltype(getData().training_images)>;
+using ImagesT = stdx::decay_t<decltype(getData("").training_images)>;
 //LabelsT == vector<uint8_t>
-using LabelsT = stdx::decay_t<decltype(getData().training_labels)>;
+using LabelsT = stdx::decay_t<decltype(getData("").training_labels)>;
 //Img == vector<uint8_t> ?
-using Img = stdx::decay_t<decltype(getData().training_images[0])>;
+using Img = stdx::decay_t<decltype(getData("").training_images[0])>;
 
 
 
