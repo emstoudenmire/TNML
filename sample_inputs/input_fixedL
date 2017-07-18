@@ -1,14 +1,17 @@
 input
-    {
-    imglen = 8
+{
+Ntrain = 100
+imglen = 28
 
-    nthread = 2
+cutoff = 1E-12
+maxm = 40
+nsweeps = 50
+lambda = 1E-3
 
-    Npass = 4
+Npass = 2 
 
-    maxm = 20
-    cutoff = 1E-9
-    Nsweep = 10
+nthread = 2
+Nbatch = 4
 
-    lambda = 1E-8
-    }
+ninitial = 2
+}
