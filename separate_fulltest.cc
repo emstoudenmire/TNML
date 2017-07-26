@@ -86,15 +86,22 @@ fullTest(vector<MPS> const& Ws,
 int
 main(int argc, const char* argv[])
     {
-    //
-    //
-    auto imglen = 14;
+    if(argc != 2) 
+       { 
+       printfln("Usage: %s inputfile",argv[0]); 
+       return 0; 
+       }
+    auto input = InputGroup(argv[1],"input");
+
+    int d = 2;
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
+    auto fname = input.getString("fname","W");
+    auto imglen = input.getInt("imglen",28);
+
     //auto labels = stdx::make_array<long>(2,5);
     //auto labels = stdx::make_array<long>(7,8);
     //auto labels = stdx::make_array<long>(7,8,9);
     auto labels = stdx::make_array<long>(0,1,2,3,4,5,6,7,8,9);
-    //
-    //
     auto NL = labels.size();
 
     print("Labels:"); for(auto l : labels) print(" ",l); println();
@@ -116,8 +123,7 @@ main(int argc, const char* argv[])
         return 0.;
         };
 
-    auto data = getData();
-
+    auto data = getData(datadir);
     auto test = getAllMNIST(data,{"Type",Test,"imglen",imglen});
 
     auto N = test.front().size();

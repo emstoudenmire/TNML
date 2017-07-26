@@ -9,26 +9,24 @@ main(int argc, const char* argv[])
     {
     if(argc != 2) 
        { 
-       printfln("Usage: %s wfname",argv[0]); 
+       printfln("Usage: %s inputfile",argv[0]); 
        return 0; 
        }
+    auto input = InputGroup(argv[1],"input");
 
-    auto fname = string(argv[1]);
+    int d = 2;
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
+    auto fname = input.getString("fname","W");
+    auto imglen = input.getInt("imglen",28);
 
-    //
-    // User adjustable options:
-    //
-    auto imglen = 14;
     //auto labels = stdx::make_array<long>(2,5);
     //auto labels = stdx::make_array<long>(7,8);
     //auto labels = stdx::make_array<long>(7,8,9);
     auto labels = stdx::make_array<long>(0,1,2,3,4,5,6,7,8,9);
-    //
-    //
 
     print("Labels:"); for(auto l : labels) print(" ",l); println();
 
-    auto data = getData();
+    auto data = getData(datadir);
     auto test = getAllMNIST(data,{"Type",Test,"imglen",imglen});
 
     auto N = test.front().size();
