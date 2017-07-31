@@ -65,7 +65,6 @@ class TrainStates
     {
     public:
     vector<TState> ts_;
-    //vector<ITensor> LE_,RE_;
     int N = 0;
     int currb_ = -1; //left env built to here
     bool dirmade_ = false;
@@ -133,7 +132,7 @@ class TrainStates
         auto currE = vector<ITensor>(batchSize_);
         for(auto bn : range(Nbatch_))
             {
-            auto batchStart = bn*Nbatch_;
+            auto batchStart = bn*batchSize_;
             for(auto n = N; n >= 3; --n)
                 {
                 pd_([&](Bound b){
@@ -174,7 +173,7 @@ class TrainStates
         // Store in t.v of each elem t of ts
         for(auto bn : range(Nbatch_))
             {
-            auto batchStart = bn*Nbatch_;
+            auto batchStart = bn*batchSize_;
             if(useL) readFromFile(fname(bn,lc),LE);
             if(useR) readFromFile(fname(bn,rc),RE);
             pd_([&](Bound b){
@@ -213,7 +212,7 @@ class TrainStates
         auto nextE = vector<ITensor>(batchSize_);
         for(auto bn : range(Nbatch_))
             {
-            auto batchStart = bn*Nbatch_;
+            auto batchStart = bn*batchSize_;
             if(hasPrev) readFromFile(fname(bn,prevc),prevE);
             pd_([&](Bound b){
             for(auto i = b.begin; i < b.end; ++i)
@@ -240,7 +239,7 @@ class TrainStates
         {
         for(auto bn : range(Nbatch_))
             {
-            auto batchStart = bn*Nbatch_;
+            auto batchStart = bn*batchSize_;
             pd_([&f,batchStart,this](Bound b)
                 {
                 //printfln("B %d %d->%d",b.n,b.begin,b.end);
