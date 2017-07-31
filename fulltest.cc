@@ -18,6 +18,7 @@ main(int argc, const char* argv[])
     auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
     auto fname = input.getString("fname","W");
     auto imglen = input.getInt("imglen",28);
+    auto feature = input.getString("feature","series");
 
     //auto labels = stdx::make_array<long>(2,5);
     //auto labels = stdx::make_array<long>(7,8);
@@ -41,7 +42,20 @@ main(int argc, const char* argv[])
         }
 
     enum Feature { Normal, Series };
-    auto ftype = Normal;
+    auto ftype = Series;
+    if(feature == "norm" || feature == "normal")
+        {
+        ftype = Normal;
+        }
+    else if(feature == "series")
+        {
+        ftype = Series;
+        }
+    else
+        {
+        Error(format("feature type \"%s\" not recognized",feature));
+        }
+
     auto phi = [ftype](Real g, int n) -> Cplx
         {
         if(g < 0 || g > 255.) Error(format("Expected g=%f to be in [0,255]",g));
