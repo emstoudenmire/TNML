@@ -1,5 +1,7 @@
 input
 {
+datadir = /Users/mstoudenmire/software/tnml/CppMNIST
+
 Ntrain = 100
 imglen = 28
 

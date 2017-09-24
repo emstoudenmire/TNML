@@ -33,6 +33,7 @@ Steps to install and run:
    - `PNGPP_DIR`: folder where the png++ header (.hpp) files are located
 4. Run the command `make`, which should successfully build the `fixedL` application.
 5. Copy one of the sample input files from the folder `sample_inputs/` to another folder of your choosing. Run each app by doing `./appname input_file_name`.
+6. Edit the input file. At a minimum, change datadir to point to the location of the CppMNIST folder (inside of this repo) on your computer. Play around with the other settings such as Ntrain (max number of training images per label) to check basic things about the code before trying a heavy-duty calculation.
 
 All of the codes require you to install the ITensor tensor network library. You can obtain it from http://github.com/ITensor/ITensor . The only software dependencies for ITensor are a compiler that supports C++11 (language and standard library) and a BLAS/LAPACK distribution such as the "lapack" package on linux, the Accelerate/Veclib framework on MacOS, or the Intel MKL library.
 

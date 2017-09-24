@@ -1,5 +1,7 @@
 input
     {
+    datadir = /Users/mstoudenmire/software/tnml/CppMNIST
+
     label = 3
     imglen = 8
 
