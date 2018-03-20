@@ -7,7 +7,7 @@ imglen = 28
 
 cutoff = 1E-12
 maxm = 40
-nsweeps = 50
+Nsweep = 50
 lambda = 1E-3
 
 Npass = 2 
