@@ -1,5 +1,5 @@
 ITENSOR_DIR=$(HOME)/software/itensor
-LIBPNG_DIR=/usr/local/Cellar/libpng/1.6.18/lib
+#LIBPNG_DIR=/usr/local/Cellar/libpng/1.6.18/lib
 PNGPP_DIR=$(HOME)/packages/png++-0.2.9
 include $(ITENSOR_DIR)/this_dir.mk
 include $(ITENSOR_DIR)/options.mk
@@ -7,7 +7,7 @@ include $(ITENSOR_DIR)/options.mk
 ################################################################
 #Options --------------
 
-HEADERS=paralleldo.h mnist.h util.h single.h
+HEADERS=paralleldo.h mllib/mnist.h util.h single.h
 
 ifdef app
 APP=$(app)
@@ -16,6 +16,7 @@ APP=separate_fulltest
 APP=single
 APP=fulltest
 APP=fixedL
+APP=linear
 endif
 
 
@@ -31,14 +32,11 @@ EXTRA_FLAGS += -std=c++1y -I$(PNGPP_DIR) -I/usr/local/include
 CCFLAGS += $(EXTRA_FLAGS)
 CCGFLAGS += $(EXTRA_FLAGS)
 
+ifdef LIBPNG_DIR
 EXTRA_LIBFLAGS += -L$(LIBPNG_DIR) -lpng16
 LIBFLAGS += $(EXTRA_LIBFLAGS)
 LIBGFLAGS += $(EXTRA_LIBFLAGS)
-
-#CCFLAGS=-I. $(ITENSOR_INCLUDEFLAGS) $(OPTIMIZATIONS) -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
-#CCGFLAGS=-I. $(ITENSOR_INCLUDEFLAGS) $(DEBUGFLAGS) -std=c++1y -I$(HOME)/packages/png++-0.2.9 -I/usr/local/include
-#LIBFLAGS=-L$(ITENSOR_LIBDIR) $(ITENSOR_LIBFLAGS) -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
-#LIBGFLAGS=-L$(ITENSOR_LIBDIR) $(ITENSOR_LIBGFLAGS) -L/usr/local/Cellar/libpng/1.6.18/lib -lpng16
+endif
 
 #Rules ------------------
 
