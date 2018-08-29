@@ -2,7 +2,7 @@
 #include "itensor/util/print_macro.h"
 #include "itensor/mps/mps.h"
 #include "itensor/mps/sites/spinhalf.h"
-#include "mnist.h"
+#include "mllib/mnist.h"
 
 using namespace itensor;
 using std::min;
@@ -114,7 +114,7 @@ randImg(std::vector<ImgType> const& imgs,
         if(w >= imgs.size()) w = imgs.size()-1;
 
         auto& img = imgs.at(w);
-        if(img.label() == label) return img;
+        if(img.label == label) return img;
         }
     Error(format("Did not find image with requested label after %d tries",max_tries));
     return imgs.front();

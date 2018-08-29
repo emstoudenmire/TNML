@@ -19,7 +19,6 @@ main(int argc, char* argv[])
     const auto L = input.getInt("label",0);
     auto Ntrain = input.getInt("Ntrain",60000);
     auto Nsweep = input.getInt("Nsweep",50);
-    auto imglen = input.getInt("imglen",14);
     auto cutoff = input.getReal("cutoff",1E-8);
     auto maxm = input.getInt("maxm",5000);
     auto minm = input.getInt("minm",max(10,maxm/2));
@@ -54,8 +53,7 @@ main(int argc, char* argv[])
     auto Wname = format("W%d",L);
     auto labels = array<long,NL>{{0,1,2,3,4,5,6,7,8,9}};
 
-    auto data = getData(datadir);
-    auto train = getAllMNIST(data,{"Type",Train,"imglen",imglen});
+    auto train = readMNIST(datadir,mllib::Train,{"NT=",Ntrain});
 
     auto N = train.front().size();
     printfln("%d sites",N);
@@ -91,7 +89,7 @@ main(int argc, char* argv[])
     auto counts = array<int,10>{};
     for(auto& img : train)
         {
-        auto l = img.label();
+        auto l = img.label;
         if(counts[l] >= Ntrain) continue;
         trainmps.at(l).push_back(makeMPS(sites,img,phi));
         ++counts[l];
@@ -157,7 +155,7 @@ main(int argc, char* argv[])
         nl = (nl+1==(long)labels.size()) ? 0 : nl+1;
         return l;
         };
-    auto nextTrainN = [&labels,&trainmps](long l)
+    auto nextTrainN = [&trainmps](long l)
         {
         static auto ncount = array<size_t,10>{};
         auto& set = trainmps.at(l);

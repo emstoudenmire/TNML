@@ -58,7 +58,6 @@ One difference from the algorithm described in the paper is that the label index
 Warning: fixedL can use a lot of RAM. If this happens, adjust the Nbatch parameter described below to make the program read smaller amounts of data into ram at each step.
 
 Input parameters:
-- imglen (integer) [default: 14]: linear dimension of images to use for training and testing. Try imglen=8 for testing the basic ideas; performance can be surprisingly good even for images shrunk down to this size. imglen=28 is the native size of MNIST images.
 - nthread (integer) [default: 1]: number of threads to use to parallelize gradient calculations. Not recommended to set this larger than number of cores on your processor.
 - Npass (integer) [default: 4]: maximum number of conjugate gradient passes to do at each bond.
 - Nsweep (integer) [default: 50]: total number of sweeps (left-to-right passes over the MPS) to do.
@@ -109,8 +108,6 @@ When saving the currently optimized weight tensor MPS to disk, the `single` app 
 # Tips for Using the Codes
 
 - Using the "normal" feature map (i.e. [cos(pi/2*x),sin(pi/2*x)]) on larger image sizes can lead to a vanishing gradient problem. It's easy to understand why: this feature map is normalized so the overlap of two local feature vectors is strictly less than or equal to 1. To the extent that one can think of the weight MPS "W" as a sum (or superposition) of various input training states (the representer theorem, which doesn't strictly apply to tensor networks by the way), then the projection of training vectors into the environment of the weight MPS can lead to very small numbers. An interesting research direction would be to remedy this scenario by coming up with better initial states for W.
-
-- Since the codes include an automatic feature to reduce image sizes, it's a good idea to test research ideas on very small images (8x8) to quickly see if an idea works or not.
 
 - I have been finding that the `single` code can overfit the training data. This isn't too surprising since it produces a completely different MPS for each label type, thus creates a model with many more parameters than the `fixedL` code does. It would be interesting to see if this overfitting can be remedied by explicit L2 regularization, or perhaps just by restricting the bond dimensions of the MPS.
 

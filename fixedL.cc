@@ -25,10 +25,10 @@ struct TState
     ITensor v;
     vector<Real> data;
 
-    template<typename Func>
+    template<typename Func, typename ImgType>
     TState(int n_, int l_, 
            SiteSet const& sites, 
-           PImage const& img, 
+           ImgType const& img, 
            Func const& phi)
       : sites_(sites),
         n(n_),
@@ -588,7 +588,6 @@ main(int argc, const char* argv[])
     auto Ntrain = input.getInt("Ntrain",60000);
     auto Nbatch = input.getInt("Nbatch",10);
     auto Nsweep = input.getInt("Nsweep",50);
-    auto imglen = input.getInt("imglen",14);
     auto cutoff = input.getReal("cutoff",1E-10);
     auto maxm = input.getInt("maxm",5000);
     auto minm = input.getInt("minm",max(10,maxm/2));
@@ -611,8 +610,7 @@ main(int argc, const char* argv[])
 
     auto labels = array<long,NL>{{0,1,2,3,4,5,6,7,8,9}};
 
-    auto data = getData(datadir);
-    auto train = getAllMNIST(data,{"Type",Train,"imglen",imglen});
+    auto train = readMNIST(datadir,mllib::Train,{"NT=",Ntrain});
 
     auto N = train.front().size();
     auto c = N/2;
@@ -636,7 +634,7 @@ main(int argc, const char* argv[])
     //
     // Local feature map (a lambda function)
     //
-    auto phi = [d](Real g, int n) -> Real
+    auto phi = [](Real g, int n) -> Real
         {
         if(g < 0 || g > 255.) Error(format("Expected g=%f to be in [0,255]",g));
         auto x = g/255.;
@@ -649,8 +647,7 @@ main(int argc, const char* argv[])
     auto n = 1;
     for(auto& img : train)
         {
-        auto l = img.label();
-        if(counts[l] >= Ntrain) continue;
+        auto l = img.label;
         states.emplace_back(n++,l,sites,img,phi);
         ++counts[l];
         }
@@ -659,15 +656,15 @@ main(int argc, const char* argv[])
 
     auto ts = TrainStates(move(states),N,Nthread,Nbatch);
 
-    //
-    //Visually inspect images to see if they look ok
-    //
-    n = 1;
-    for(auto& img : train)
-        {
-        writeGray(img,format("img%02d_L%d.png",n++,img.label()));
-        if(n > 10) break;
-        }
+    ////
+    ////Visually inspect images to see if they look ok
+    ////
+    //n = 1;
+    //for(auto& img : train)
+    //    {
+    //    writeGray(img,format("img%02d_L%d.png",n++,img.label));
+    //    if(n > 10) break;
+    //    }
 
     Index L;
     MPS W;

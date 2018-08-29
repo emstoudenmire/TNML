@@ -17,7 +17,6 @@ main(int argc, const char* argv[])
     int d = 2;
     auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
     auto fname = input.getString("fname","W");
-    auto imglen = input.getInt("imglen",28);
     auto feature = input.getString("feature","series");
 
     //auto labels = stdx::make_array<long>(2,5);
@@ -27,8 +26,7 @@ main(int argc, const char* argv[])
 
     print("Labels:"); for(auto l : labels) print(" ",l); println();
 
-    auto data = getData(datadir);
-    auto test = getAllMNIST(data,{"Type",Test,"imglen",imglen});
+    auto test = readMNIST(datadir,mllib::Test);
 
     auto N = test.front().size();
     SpinHalf sites;
@@ -75,7 +73,7 @@ main(int argc, const char* argv[])
     auto testmps = MPSArr{};
     for(auto& img : test)
         {
-        auto l = img.label();
+        auto l = img.label;
         auto& testmpsL = testmps.at(l);
         testmpsL.push_back(makeMPS(sites,img,phi));
         }

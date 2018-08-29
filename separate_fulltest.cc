@@ -123,8 +123,7 @@ main(int argc, const char* argv[])
         return 0.;
         };
 
-    auto data = getData(datadir);
-    auto test = getAllMNIST(data,{"Type",Test,"imglen",imglen});
+    auto test = readMNIST(datadir,mllib::Test);
 
     auto N = test.front().size();
     SpinHalf sites;
@@ -142,7 +141,7 @@ main(int argc, const char* argv[])
     auto counts = array<int,10>{};
     for(auto& img : test)
         {
-        auto l = img.label();
+        auto l = img.label;
         testmps.at(l).push_back(makeMPS(sites,img,phi));
         ++counts[l];
         }
