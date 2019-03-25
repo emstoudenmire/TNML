@@ -1,7 +1,7 @@
 
 _NOTE: these codes are research, proof-of-principle codes only, and are not intended to demonstrate the state of the art in terms of training times for matrix product states for machine learning_
 
-_If you are seeking fast approaches for optimizing MPS, we recommend trying newer libraries which use stochastic gradient optimization methods, such as TorchMPS_: https://github.com/jemisjoky/TorchMPS _
+_If you are seeking fast approaches for optimizing MPS, we recommend trying newer libraries which use stochastic gradient optimization methods, such as TorchMPS_: https://github.com/jemisjoky/TorchMPS
 
 # Tensor network machine learning
 
