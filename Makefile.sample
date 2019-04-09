@@ -12,10 +12,10 @@ HEADERS=paralleldo.h mllib/mnist.h util.h single.h
 ifdef app
 APP=$(app)
 else
-APP=separate_fulltest
 APP=single
 APP=fulltest
 APP=fixedL
+APP=separate_fulltest
 APP=linear
 endif
 
@@ -69,4 +69,4 @@ mkdebugdir:
 	mkdir -p .debug_objs
 
 clean:
-	rm -fr *.o $(APP) $(APP)-g .debug_objs
+	rm -fr *.o $(APP) $(APP)-g .debug_objs fulltest single fixedL linear separate_fulltest

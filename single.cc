@@ -15,7 +15,7 @@ main(int argc, char* argv[])
        }
     auto input = InputGroup(argv[1],"input");
 
-    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/mllib/MNIST");
     const auto L = input.getInt("label",0);
     auto Ntrain = input.getInt("Ntrain",60000);
     auto Nsweep = input.getInt("Nsweep",50);

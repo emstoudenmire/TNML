@@ -15,7 +15,7 @@ main(int argc, const char* argv[])
     auto input = InputGroup(argv[1],"input");
 
     int d = 2;
-    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/mllib/MNIST");
     auto fname = input.getString("fname","W");
     auto feature = input.getString("feature","series");
 

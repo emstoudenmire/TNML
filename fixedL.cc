@@ -584,7 +584,7 @@ main(int argc, const char* argv[])
     auto input = InputGroup(argv[1],"input");
 
     int d = 2;
-    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/CppMNIST");
+    auto datadir = input.getString("datadir","/Users/mstoudenmire/software/tnml/mllib/MNIST");
     auto Ntrain = input.getInt("Ntrain",60000);
     auto Nbatch = input.getInt("Nbatch",10);
     auto Nsweep = input.getInt("Nsweep",50);

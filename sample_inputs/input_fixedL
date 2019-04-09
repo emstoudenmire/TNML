@@ -1,6 +1,6 @@
 input
 {
-datadir = /Users/mstoudenmire/software/tnml/CppMNIST
+datadir = /Users/mstoudenmire/software/tnml/mllib/MNIST
 
 Ntrain = 100
 imglen = 28
